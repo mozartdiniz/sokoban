@@ -8,7 +8,12 @@ import store, { client } from 'store'
 import speedrun from 'speedrun'
 
 const history = syncHistoryWithStore(originalHistory, store, {
-  selectLocationState: state => state.get('navigation').toJS()
+  selectLocationState: state => ({
+    locationBeforeTransitions: state.getIn([
+      'navigation',
+      'locationBeforeTransitions'
+    ])
+  })
 })
 
 const rootElement = global.document.getElementById('root')
