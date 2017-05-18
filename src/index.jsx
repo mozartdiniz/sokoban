@@ -4,7 +4,7 @@ import { AppContainer } from 'react-hot-loader'
 import Root from './components/Root'
 import { syncHistoryWithStore } from 'react-router-redux'
 import originalHistory from 'routes/history'
-import store from 'store'
+import store, { client } from 'store'
 import speedrun from 'speedrun'
 
 const history = syncHistoryWithStore(originalHistory, store, {
@@ -16,7 +16,7 @@ const rootElement = global.document.getElementById('root')
 const renderApp = RootComponent => {
   render(
     <AppContainer>
-      <RootComponent store={store} history={history} />
+      <RootComponent store={store} client={client} history={history} />
     </AppContainer>,
     rootElement
   )

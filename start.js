@@ -201,6 +201,14 @@ app.post('/api/scores', (request, response) => {
     response.json({ status: 'Scores saved.' })
   }, 500)
 })
+
+app.get('/graphql', (request, response) => {
+  response.json({ status: 'OK' })
+})
+app.post('/graphql', (request, response) => {
+  response.json({ status: 'OK' })
+})
+
 app.ws('/recorder', (ws, request) => {
   ws.on('message', message => {
     const payload = JSON.parse(message)
@@ -390,6 +398,9 @@ new WebpackDevServer(webpack(webpackConfig), {
         }
         return false
       }
+    },
+    '/graphql': {
+      target: 'http://' + (host || 'localhost') + ':' + proxyPort
     },
     '/recorder': {
       target: 'http://' + (host || 'localhost') + ':' + proxyPort,

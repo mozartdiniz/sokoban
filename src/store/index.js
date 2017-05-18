@@ -1,6 +1,7 @@
 import _ from 'lodash'
 import Immutable from 'immutable'
 import { createStore, applyMiddleware } from 'redux'
+import { ApolloClient } from 'react-apollo'
 import createSagaMiddleware from 'redux-saga'
 import appSaga from 'sagas'
 import history from 'routes/history'
@@ -29,6 +30,10 @@ import {
   ActionCreators as ReplayerActionCreators
 } from 'domains/replayer'
 
+export const client = new ApolloClient({
+  reduxRootSelector: state => state.get('apollo')
+})
+
 const reducers = {
   interaction: interactionReducer,
   time: timeReducer,
@@ -36,7 +41,8 @@ const reducers = {
   level: levelReducer,
   scores: scoresReducer,
   recorder: recorderReducer,
-  replayer: replayerReducer
+  replayer: replayerReducer,
+  apollo: client.reducer()
 }
 
 const appReducer = (state = Immutable.Map(), action = {}) => {
@@ -145,7 +151,8 @@ const appMiddleware = applyMiddleware(
   navigationMiddleware,
   pauseResumeSagaMiddleware(sagaMiddleware),
   filterRecorderMiddleware(recorderMiddleware),
-  replayerMiddleware
+  replayerMiddleware,
+  client.middleware()
 )
 
 const store = createStore(appReducer, savedState, appMiddleware)
