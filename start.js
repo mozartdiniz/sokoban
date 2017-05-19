@@ -17,6 +17,9 @@ const proxyPort = port + 1
 // API
 const fs = require('fs')
 const path = require('path')
+const graphqlExpress = require('graphql-server-express').graphqlExpress
+const graphiqlExpress = require('graphql-server-express').graphiqlExpress
+const makeExecutableSchema = require('graphql-tools').makeExecutableSchema
 const levels = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, 'api', 'levels.json'))
 )
@@ -201,13 +204,107 @@ app.post('/api/scores', (request, response) => {
     response.json({ status: 'Scores saved.' })
   }, 500)
 })
+const graphqlSchema = makeExecutableSchema({
+  typeDefs: [
+    `
+    type Level {
+      id: Int!
+      rows: [String]
+    }
 
-app.get('/graphql', (request, response) => {
-  response.json({ status: 'OK' })
+    type Score {
+      id: Int!
+      playerMoves: Int
+      boxMoves: Int
+    }
+
+    type Query {
+      level(id: Int!): Level
+      score(id: Int!): Score
+      scores: [Score]
+    }
+
+    input ScoreInput {
+      id: Int!
+      playerMoves: Int
+      boxMoves: Int
+    }
+
+    input ScoresInput {
+      scores: [ScoreInput]
+    }
+
+    type Mutation {
+      setScore (input: ScoreInput): Score
+      setScores (input: ScoresInput): [Score]
+    }
+
+    schema {
+      query: Query
+      mutation: Mutation
+    }
+  `
+  ],
+  resolvers: {
+    Query: {
+      level(obj, args, context, info) {
+        return levels['' + args.id] && { id: args.id }
+      },
+      score(obj, args, context, info) {
+        return scores['' + args.id] && { id: args.id }
+      },
+      scores(obj, args, context, info) {
+        return Object.keys(scores).map(id => ({ id: parseInt(id, 10) }))
+      }
+    },
+    Mutation: {
+      setScore(obj, args, context, info) {
+        if (args.input.id > 0 && args.input.id <= 100) {
+          scores['' + args.input.id].playerMoves = args.input.playerMoves
+          scores['' + args.input.id].boxMoves = args.input.boxMoves
+          fs.writeFileSync(
+            path.resolve(__dirname, 'api', 'scores.json'),
+            JSON.stringify(scores, null, INDENTATION)
+          )
+        }
+        return scores['' + args.input.id] && { id: args.input.id }
+      },
+      setScores(obj, args, context, info) {
+        args.input.scores.forEach(score => {
+          if (score.id > 0 && score.id <= 100) {
+            scores['' + score.id].playerMoves = score.playerMoves
+            scores['' + score.id].boxMoves = score.boxMoves
+          }
+        })
+        fs.writeFileSync(
+          path.resolve(__dirname, 'api', 'scores.json'),
+          JSON.stringify(scores, null, INDENTATION)
+        )
+        return Object.keys(scores).map(id => ({ id: parseInt(id, 10) }))
+      }
+    },
+    Level: {
+      rows(level) {
+        return levels['' + level.id]
+      }
+    },
+    Score: {
+      playerMoves(score) {
+        return scores['' + score.id].playerMoves
+      },
+      boxMoves(score) {
+        return scores['' + score.id].boxMoves
+      }
+    }
+  }
 })
-app.post('/graphql', (request, response) => {
-  response.json({ status: 'OK' })
-})
+app.use('/graphql', graphqlExpress({ schema: graphqlSchema }))
+app.use(
+  '/graphiql',
+  graphiqlExpress({
+    endpointURL: '/graphql'
+  })
+)
 
 app.ws('/recorder', (ws, request) => {
   ws.on('message', message => {
