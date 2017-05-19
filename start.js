@@ -23,7 +23,7 @@ const makeExecutableSchema = require('graphql-tools').makeExecutableSchema
 const levels = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, 'api', 'levels.json'))
 )
-const scores = JSON.parse(
+let scores = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, 'api', 'scores.json'))
 )
 // WS
@@ -197,6 +197,7 @@ app.get('/api/scores', (request, response) => {
 })
 app.post('/api/scores', (request, response) => {
   setTimeout(() => {
+    scores = request.body
     fs.writeFileSync(
       path.resolve(__dirname, 'api', 'scores.json'),
       JSON.stringify(request.body, null, INDENTATION)
@@ -208,24 +209,24 @@ const graphqlSchema = makeExecutableSchema({
   typeDefs: [
     `
     type Level {
-      id: Int!
+      id: ID!
       rows: [String]
     }
 
     type Score {
-      id: Int!
+      id: ID!
       playerMoves: Int
       boxMoves: Int
     }
 
     type Query {
-      level(id: Int!): Level
-      score(id: Int!): Score
+      level(id: ID!): Level
+      score(id: ID!): Score
       scores: [Score]
     }
 
     input ScoreInput {
-      id: Int!
+      id: ID!
       playerMoves: Int
       boxMoves: Int
     }
@@ -260,8 +261,12 @@ const graphqlSchema = makeExecutableSchema({
     Mutation: {
       setScore(obj, args, context, info) {
         if (args.input.id > 0 && args.input.id <= 100) {
-          scores['' + args.input.id].playerMoves = args.input.playerMoves
-          scores['' + args.input.id].boxMoves = args.input.boxMoves
+          if (args.input.playerMoves === -1 || args.input.boxMoves === -1) {
+            scores['' + args.input.id] = {}
+          } else {
+            scores['' + args.input.id].playerMoves = args.input.playerMoves
+            scores['' + args.input.id].boxMoves = args.input.boxMoves
+          }
           fs.writeFileSync(
             path.resolve(__dirname, 'api', 'scores.json'),
             JSON.stringify(scores, null, INDENTATION)
@@ -272,8 +277,12 @@ const graphqlSchema = makeExecutableSchema({
       setScores(obj, args, context, info) {
         args.input.scores.forEach(score => {
           if (score.id > 0 && score.id <= 100) {
-            scores['' + score.id].playerMoves = score.playerMoves
-            scores['' + score.id].boxMoves = score.boxMoves
+            if (score.playerMoves === -1 || score.boxMoves === -1) {
+              scores['' + score.id] = {}
+            } else {
+              scores['' + score.id].playerMoves = score.playerMoves
+              scores['' + score.id].boxMoves = score.boxMoves
+            }
           }
         })
         fs.writeFileSync(

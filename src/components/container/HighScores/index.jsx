@@ -3,6 +3,7 @@ import styles from './styles'
 import React, { Component } from 'react'
 import PropTypes from 'prop-types'
 import { connect } from 'react-redux'
+import { graphql, gql, compose } from 'react-apollo'
 import classNames from 'classnames'
 import {
   ActionCreators as InteractionActionCreators
@@ -11,26 +12,21 @@ import {
   ActionCreators as NavigationActionCreators,
   Selectors as NavigationSelectors
 } from 'domains/navigation'
-import { Constants as LevelConstants } from 'domains/level'
-import {
-  ActionCreators as ScoresActionCreators,
-  Selectors as ScoresSelectors
-} from 'domains/scores'
+import { Selectors as ScoresSelectors } from 'domains/scores'
 import { Container, Message, Button } from 'components/presentational'
 
 const mapStateToProps = state => ({
-  scores: ScoresSelectors.levelsScores(state),
   backgroundImage: ScoresSelectors.backgroundImage(state),
   selectedItemIndex: NavigationSelectors.currentViewState(state).get(
     'selectedItemIndex'
-  ) || 0
+  ) > -1
+    ? NavigationSelectors.currentViewState(state).get('selectedItemIndex')
+    : -1
 })
 const mapDispatchToProps = {
   bindKeys: InteractionActionCreators.bindKeys,
   unbindKeys: InteractionActionCreators.unbindKeys,
   updateViewState: NavigationActionCreators.updateViewState,
-  removeAllScores: ScoresActionCreators.removeAllScores,
-  removeScore: ScoresActionCreators.removeScore,
   back: NavigationActionCreators.navigateBack
 }
 
@@ -41,41 +37,84 @@ class HighScores extends Component {
       ArrowUp: () => {
         const { selectedItemIndex, updateViewState } = this.props
 
-        if (selectedItemIndex > 0) {
+        if (selectedItemIndex > -1) {
           updateViewState({ selectedItemIndex: selectedItemIndex - 1 })
         }
       },
       ArrowDown: () => {
-        const { selectedItemIndex, updateViewState } = this.props
+        const {
+          data: { scores },
+          selectedItemIndex,
+          updateViewState
+        } = this.props
 
-        if (selectedItemIndex + 1 <= LevelConstants.NUMBER_OF_LEVELS) {
+        if (!scores) {
+          return
+        }
+
+        if (scores[selectedItemIndex + 1]) {
           updateViewState({ selectedItemIndex: selectedItemIndex + 1 })
         }
       },
       ArrowLeft: () => {
         const { selectedItemIndex, updateViewState } = this.props
 
-        if (selectedItemIndex - 10 > 0) {
+        if (selectedItemIndex - 10 > -1) {
           updateViewState({ selectedItemIndex: selectedItemIndex - 10 })
         }
       },
       ArrowRight: () => {
-        const { selectedItemIndex, updateViewState } = this.props
+        const {
+          data: { scores },
+          selectedItemIndex,
+          updateViewState
+        } = this.props
 
-        if (selectedItemIndex + 10 <= LevelConstants.NUMBER_OF_LEVELS) {
+        if (!scores) {
+          return
+        }
+
+        if (scores[selectedItemIndex + 10]) {
           updateViewState({ selectedItemIndex: selectedItemIndex + 10 })
         }
       },
       Space: () => {
-        const { selectedItemIndex, removeScore, removeAllScores } = this.props
+        const {
+          data: { scores },
+          selectedItemIndex,
+          removeScore,
+          removeAllScores
+        } = this.props
 
-        if (selectedItemIndex === 0) {
-          removeAllScores()
+        if (!scores) {
+          return
+        }
+
+        if (selectedItemIndex === -1) {
+          removeAllScores({
+            variables: {
+              scoresToSet: {
+                scores: scores.map(score => ({
+                  id: score.id,
+                  playerMoves: -1,
+                  boxMoves: -1
+                }))
+              }
+            }
+          })
         } else if (
-          selectedItemIndex > 0 &&
-          selectedItemIndex <= LevelConstants.NUMBER_OF_LEVELS
+          selectedItemIndex > -1 &&
+          selectedItemIndex < scores.length
         ) {
-          removeScore(selectedItemIndex)
+          removeScore({
+            variables: {
+              scoreToSet: {
+                id: `${selectedItemIndex + 1}`,
+                playerMoves: -1,
+                boxMoves: -1
+              }
+            }
+          })
         }
       },
       KeyB: () => {
@@ -94,48 +133,44 @@ class HighScores extends Component {
   }
 
   render() {
-    const { scores, backgroundImage, selectedItemIndex } = this.props
+    const { data: { scores }, backgroundImage, selectedItemIndex } = this.props
     const explanation = 'Level: player moves / box moves'
     const removeAllLevels = 'Remove all levels'
     const removeLevel = 'Remove level'
     const lists = []
     let children = []
-    Array(LevelConstants.NUMBER_OF_LEVELS).fill().forEach((_, index) => {
-      const realIndex = index + 1
-      children.push(
-        <Message
-          key={`m${realIndex}`}
-          className={classNames(
-            styles.message,
-            (scores.getIn(['' + realIndex, 'playerMoves']) ||
-              scores.getIn(['' + realIndex, 'boxMoves'])) &&
-              styles.success
-          )}
-        >{`${realIndex}: ${scores.getIn([
-          '' + realIndex,
-          'playerMoves'
-        ]) || '-'} / ${scores.getIn([
-          '' + realIndex,
-          'boxMoves'
-        ]) || '-'}`}</Message>
-      )
-      children.push(
-        <Button
-          key={`b${realIndex}`}
-          selected={selectedItemIndex === realIndex}
-        >
-          {removeLevel}
-        </Button>
-      )
-      if (realIndex % 10 === 0) {
-        lists.push(
-          <Container key={realIndex} className={styles.list}>
-            {children}
-          </Container>
+    scores &&
+      scores.length &&
+      scores.forEach((score, index) => {
+        children.push(
+          <Message
+            key={`m${index}`}
+            className={classNames(
+              styles.message,
+              (score.playerMoves || score.boxMoves) && styles.success
+            )}
+          >{`${score.id}: ${score.playerMoves || '-'} / ${score.boxMoves || '-'}`}</Message>
         )
-        children = []
-      }
-    })
+        children.push(
+          <Button key={`b${index}`} selected={selectedItemIndex === index}>
+            {removeLevel}
+          </Button>
+        )
+        if ((index + 1) % 10 === 0) {
+          lists.push(
+            <Container key={index} className={styles.list}>
+              {children}
+            </Container>
+          )
+          children = []
+        } else if (index + 1 === scores.length && scores.length < 10) {
+          lists.push(
+            <Container key={index} className={styles.list}>
+              {children}
+            </Container>
+          )
+        }
+      })
 
     return (
       <Container>
@@ -146,15 +181,51 @@ class HighScores extends Component {
           className={styles.backgroundImage}
         />
         <Message>{explanation}</Message>
-        <Button selected={selectedItemIndex === 0}>{removeAllLevels}</Button>
+        <Button selected={selectedItemIndex === -1}>{removeAllLevels}</Button>
         {lists}
       </Container>
     )
   }
 }
 
+const allScoresQuery = gql`
+  query {
+    scores {
+      id
+      playerMoves
+      boxMoves
+    }
+  }
+`
+
+const removeScoreMutation = gql`
+  mutation ($scoreToSet: ScoreInput!) {
+    setScore(input: $scoreToSet) {
+      id
+      playerMoves
+      boxMoves
+    }
+  }
+`
+
+const removeAllScoresMutation = gql`
+  mutation ($scoresToSet: ScoresInput!) {
+    setScores(input: $scoresToSet) {
+      id
+      playerMoves
+      boxMoves
+    }
+  }
+`
+
+const HighScoresWithQuery = compose(
+  graphql(allScoresQuery),
+  graphql(removeScoreMutation, { name: 'removeScore' }),
+  graphql(removeAllScoresMutation, { name: 'removeAllScores' })
+)(HighScores)
+
 HighScores.propTypes = {
-  scores: PropTypes.object,
+  data: PropTypes.object,
   backgroundImage: PropTypes.string,
   selectedItemIndex: PropTypes.number,
   bindKeys: PropTypes.func.isRequired,
@@ -165,4 +236,4 @@ HighScores.propTypes = {
   back: PropTypes.func.isRequired
 }
 
-export default connect(mapStateToProps, mapDispatchToProps)(HighScores)
+export default connect(mapStateToProps, mapDispatchToProps)(HighScoresWithQuery)
